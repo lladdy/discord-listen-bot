@@ -12,8 +12,8 @@ import (
 func main() {
 
 	var (
-		GuildID   = flag.String("g", "644694725202542603", "Guild ID")
-		ChannelID = flag.String("c", "644694725202542607", "Channel ID")
+		GuildID   = flag.String("g", "430111136822722590", "Guild ID")
+		ChannelID = flag.String("c", "643492477822828554", "Channel ID")
 		err       error
 	)
 	flag.Parse()
