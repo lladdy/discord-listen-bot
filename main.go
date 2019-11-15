@@ -64,9 +64,6 @@ func echo(v *discordgo.VoiceConnection) {
 	send := make(chan []int16, 2)
 	go dgvoice.SendPCM(v, send)
 
-	v.Speaking(true)
-	defer v.Speaking(false)
-
 	c, err := oto.NewContext(*sampleRate, *channelNum, *bitDepthInBytes, 4096)
 	if err != nil {
 		panic(err.Error())
