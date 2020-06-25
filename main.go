@@ -72,8 +72,8 @@ func main() {
 }
 
 var (
-	GuildID   = flag.String("g", "430111136822722590", "Guild ID")
-	ChannelID = flag.String("c", "643492477822828554", "Channel ID")
+	GuildID   = flag.String("g", "644694725202542603", "Guild ID")
+	ChannelID = flag.String("c", "644694725202542607", "Channel ID")
 )
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -137,9 +137,13 @@ func listen(v *discordgo.VoiceConnection) {
 			return
 		}
 
+		// Down-sample from 16 bit to 8 bit: https://stackoverflow.com/questions/5717447/convert-16-bit-pcm-to-8-bit
 		bytes := make([]byte, len(p.PCM))
 		for index, _ := range bytes {
 			bytes[index] = uint8(p.PCM[index]>>8) + 128
+			if bytes[index] < 0xff && ((p.PCM[index] & 0xff) > 0x80) {
+				bytes[index] += 1
+			}
 		}
 
 		_, err := player.Write(bytes)
