@@ -10,21 +10,47 @@ import (
 	"strings"
 	"syscall"
 
-	//"time"
+	"github.com/spf13/viper"
 
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 )
 
-// global audio context
-var c *oto.Context
-var player *oto.Player
+// Initialize the config
+func init() {
+	viper.SetConfigName("config")
+	viper.AddConfigPath(".")
+	viper.SetConfigType("json")
+
+	cfgerr := viper.ReadInConfig()
+	if cfgerr != nil {
+		panic(fmt.Errorf("Fatal error config file: %s \n", cfgerr))
+	}
+
+	GuildID = viper.GetString("GuildID")
+	ChannelID = viper.GetString("ChannelID")
+}
+
+var (
+	// global audio context
+	c      *oto.Context
+	player *oto.Player
+
+	// audio params
+	sampleRate      = flag.Int("samplerate", 48000, "sample rate")
+	channelNum      = flag.Int("channelnum", 2, "number of channel")
+	bitDepthInBytes = flag.Int("bitdepthinbytes", 1, "bit depth in bytes")
+
+	// Discord guild and channel ID - loaded from config
+	GuildID   string
+	ChannelID string
+)
 
 func main() {
 	flag.Parse()
 
 	// Connect to Discord
-	discord, err := discordgo.New("Bot " + "NjQ0NjkzMjczODg1MDE2MTA0.Xc3vcQ.4ujavEnx1H8L1S5xLpBxKvxg_l8")
+	discord, err := discordgo.New("Bot " + viper.GetString("DiscordBotToken"))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -71,11 +97,6 @@ func main() {
 	return
 }
 
-var (
-	GuildID   = flag.String("g", "644694725202542603", "Guild ID")
-	ChannelID = flag.String("c", "644694725202542607", "Channel ID")
-)
-
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Ignore all messages created by the bot itself
 	if m.Author.ID == s.State.User.ID {
@@ -88,10 +109,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		method := strings.Split(m.Content, " ")[0][1:]
 
 		if method == "j" || method == "join" {
-			if len(s.VoiceConnections) == 0 || s.VoiceConnections[*GuildID].ChannelID != *ChannelID {
+			if len(s.VoiceConnections) == 0 || s.VoiceConnections[GuildID].ChannelID != ChannelID {
 				// Connect to voice channel.
 				// NOTE: Setting mute to true, deaf to false.
-				dgv, err := s.ChannelVoiceJoin(*GuildID, *ChannelID, true, false)
+				dgv, err := s.ChannelVoiceJoin(GuildID, ChannelID, true, false)
 				if err != nil {
 					fmt.Println(err)
 					return
@@ -108,8 +129,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if method == "l" || method == "leave" {
 			// Connect to voice channel.
 			// NOTE: Setting mute to true, deaf to false.
-			s.VoiceConnections[*GuildID].Close()
-			_, err := s.ChannelVoiceJoin(*GuildID, "", true, false)
+			s.VoiceConnections[GuildID].Close()
+			_, err := s.ChannelVoiceJoin(GuildID, "", true, false)
 			if err != nil {
 				fmt.Println(err)
 				return
@@ -117,12 +138,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 	}
 }
-
-var (
-	sampleRate      = flag.Int("samplerate", 44100, "sample rate")
-	channelNum      = flag.Int("channelnum", 2, "number of channel")
-	bitDepthInBytes = flag.Int("bitdepthinbytes", 1, "bit depth in bytes")
-)
 
 func listen(v *discordgo.VoiceConnection) {
 
@@ -137,19 +152,27 @@ func listen(v *discordgo.VoiceConnection) {
 			return
 		}
 
-		// Down-sample from 16 bit to 8 bit: https://stackoverflow.com/questions/5717447/convert-16-bit-pcm-to-8-bit
-		bytes := make([]byte, len(p.PCM))
-		for index, _ := range bytes {
-			bytes[index] = uint8(p.PCM[index]>>8) + 128
-			if bytes[index] < 0xff && ((p.PCM[index] & 0xff) > 0x80) {
-				bytes[index] += 1
-			}
-		}
+		bytes := downsampleAudio(p)
 
-		_, err := player.Write(bytes)
-		if err != nil {
-			print(err.Error())
-			return
+		playAudioBytes(bytes)
+	}
+}
+
+func downsampleAudio(p *discordgo.Packet) []byte {
+	// Down-sample from 16 bit to 8 bit: https://stackoverflow.com/questions/5717447/convert-16-bit-pcm-to-8-bit
+	bytes := make([]byte, len(p.PCM))
+	for index, _ := range bytes {
+		bytes[index] = uint8(p.PCM[index]>>8) + 128
+		if bytes[index] < 0xff && ((p.PCM[index] & 0xff) > 0x80) {
+			bytes[index] += 1
 		}
+	}
+	return bytes
+}
+
+func playAudioBytes(bytes []byte) {
+	_, err := player.Write(bytes)
+	if err != nil {
+		print(err.Error())
 	}
 }
